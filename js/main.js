@@ -89,7 +89,51 @@ let pausedFrom = 'playing';
 let soundEnabled = false;
 let audio = null;
 let dpr = 1;
-const paddle = { x: WIDTH / 2, y: HEIGHT - 54, w: 112, h: 13 };
+// Response is a natural period, not a fixed animation duration. All re-targets
+// retain the live velocity; only a new mission resets the spring.
+const PADDLE_RESPONSE = 0.3;
+const paddle = { x: WIDTH / 2, y: HEIGHT - 54, w: 112, h: 13,
+  target: WIDTH / 2, velocity: 0, damping: 1, edge: 0, edgeVelocity: 0 };
+const feedback = { press: 0, pressVelocity: 0, score: 0, scoreVelocity: 0,
+  combo: 0, comboVelocity: 0, shownScore: 0 };
+const pressedPointers = new Set();
+function springStep(value, velocity, target, dt, damping = 1, response = PADDLE_RESPONSE) {
+  const omega = 2 * Math.PI / response;
+  velocity += (omega * omega * (target - value) - 2 * damping * omega * velocity) * dt;
+  return [value + velocity * dt, velocity];
+}
+function paddleBounds() { return [paddle.w / 2 + 8, WIDTH - paddle.w / 2 - 8]; }
+function targetPaddle(x) { paddle.target = x; paddle.damping = 1; }
+function updatePaddle(dt) {
+  const [min, max] = paddleBounds();
+  const target = clamp(paddle.target, min, max);
+  const overshoot = paddle.target - target;
+  // Rubber-band only the presentation; the collision body never leaves the field.
+  const edge = (overshoot * 8 * 0.55) / (8 + 0.55 * Math.abs(overshoot));
+  if (!effects || reducedMotion.matches) {
+    paddle.x = target; paddle.velocity = paddle.edge = paddle.edgeVelocity = 0;
+    return;
+  }
+  [paddle.x, paddle.velocity] = springStep(paddle.x, paddle.velocity, target, dt, paddle.damping);
+  paddle.x = clamp(paddle.x, min, max);
+  if ((paddle.x === min && paddle.velocity < 0) || (paddle.x === max && paddle.velocity > 0)) paddle.velocity = 0;
+  [paddle.edge, paddle.edgeVelocity] = springStep(paddle.edge, paddle.edgeVelocity, edge, dt);
+  paddle.edge = clamp(paddle.edge, -8, 8);
+}
+function updateFeedback(dt) {
+  const press = active() && (pressedPointers.size || touchDirections.size || keys.has(' ') ||
+    keys.has('arrowleft') || keys.has('arrowright') || keys.has('a') || keys.has('d')) ? 1 : 0;
+  if (!effects || reducedMotion.matches) {
+    feedback.press = press; feedback.score = 0; feedback.combo = Math.min(combo, COMBO_CAP);
+    feedback.pressVelocity = feedback.scoreVelocity = feedback.comboVelocity = 0;
+  } else {
+    [feedback.press, feedback.pressVelocity] = springStep(feedback.press, feedback.pressVelocity, press, dt, 1, 0.15);
+    [feedback.score, feedback.scoreVelocity] = springStep(feedback.score, feedback.scoreVelocity, 0, dt);
+    [feedback.combo, feedback.comboVelocity] = springStep(feedback.combo, feedback.comboVelocity, Math.min(combo, COMBO_CAP), dt);
+  }
+  $('score').style.transform = `scale(${1 + Math.min(0.1, Math.max(0, feedback.score))})`;
+  $('score').style.opacity = press && !effects ? '0.85' : '1';
+}
 const stars = Array.from({ length: 95 }, () => ({
   x: Math.random() * WIDTH, y: Math.random() * HEIGHT,
   size: 0.5 + Math.random() * 1.2, depth: 0.3 + Math.random() * 0.7,
@@ -143,6 +187,8 @@ function saveBest() {
 }
 
 function updateHUD() {
+  if (score > feedback.shownScore && effects && !reducedMotion.matches) feedback.scoreVelocity += 1.5;
+  feedback.shownScore = score;
   $('score').textContent = formatted(score);
   $('best').textContent = formatted(best);
   $('lives').setAttribute('aria-label', `${lives} ${lives === 1 ? 'life' : 'lives'} remaining`);
@@ -176,7 +222,11 @@ function updateHUD() {
 
 function setState(next) {
   state = next;
-  if (!active()) canvasTouch = null;
+  if (!active()) {
+    canvasTouch = null;
+    pressedPointers.clear();
+    paddle.target = paddle.x;
+  }
   const isIntro = state === 'ready' && !missionStarted;
   const overlayVisible = isIntro || ['paused', 'cleared', 'gameover', 'win'].includes(state);
   $('overlay').hidden = !overlayVisible;
@@ -301,6 +351,10 @@ function resetPaddle() {
   canvasTouch = null;
   paddle.x = WIDTH / 2;
   paddle.w = 112;
+  paddle.target = paddle.x;
+  paddle.velocity = paddle.edge = paddle.edgeVelocity = 0;
+  paddle.damping = 1;
+  pressedPointers.clear();
   wideTime = 0;
   piercingTime = 0;
   slowTime = 0;
@@ -602,6 +656,7 @@ function updateFieldDrift(dt) {
 
 function update(dt) {
   if (state === 'paused') return;
+  updateFeedback(dt);
   // Power duration uses real simulation seconds; slow motion never changes STEP.
   const timerDt = dt;
   dt *= slowTime > 0 && active() ? 0.5 : 1;
@@ -635,11 +690,17 @@ function update(dt) {
     }
     if (canvasTouch.mode === 'hold') {
       // Stop at the held point instead of oscillating across it each fixed step.
-      glide = clamp(canvasTouch.currentX - paddle.x, -650 * dt, 650 * dt);
+      glide = clamp(canvasTouch.currentX - paddle.target, -650 * dt, 650 * dt);
     }
   }
-  paddle.x = clamp(paddle.x + (Number(right) - Number(left)) * 650 * dt + glide,
-    paddle.w / 2 + 8, WIDTH - paddle.w / 2 - 8);
+  const direction = Number(right) - Number(left);
+  if (direction || glide) {
+    const [min, max] = paddleBounds();
+    targetPaddle(clamp(paddle.target + direction * 650 * dt + glide, min - 80, max + 80));
+  } else if (!canvasTouch && !pressedPointers.size) {
+    paddle.target = clamp(paddle.target, ...paddleBounds());
+  }
+  updatePaddle(dt);
   if (state === 'ready') {
     balls[0].x = paddle.x;
     balls[0].y = paddle.y - BALL_RADIUS - 2;
@@ -833,9 +894,15 @@ function drawComboRail() {
   for (let segment = 0; segment < COMBO_CAP; segment++) {
     const start = Math.PI + segment * Math.PI / COMBO_CAP + 0.07;
     const end = Math.PI + (segment + 1) * Math.PI / COMBO_CAP - 0.07;
-    ctx.strokeStyle = segment < Math.min(combo, COMBO_CAP) ? '#75dfd4' : '#274950';
+    ctx.strokeStyle = '#274950';
     ctx.beginPath();
     ctx.arc(paddle.x, centerY, radius, start, end);
+    ctx.stroke();
+    const fill = clamp(feedback.combo - segment, 0, 1);
+    if (!fill) continue;
+    ctx.strokeStyle = '#75dfd4';
+    ctx.beginPath();
+    ctx.arc(paddle.x, centerY, radius, start, start + (end - start) * fill);
     ctx.stroke();
   }
   ctx.fillStyle = '#eefaf6';
@@ -964,7 +1031,11 @@ function draw() {
     roundedRect(drop.x - 13, drop.y - 12, 26, 24, 6); ctx.fill(); ctx.stroke();
     drawPowerIcon(drop.type, drop.x, drop.y);
   }
-  ctx.fillStyle = stickyTime > 0 || hasStuckBall() ? POWER_COLORS.T : '#75dfd4';
+  ctx.save();
+  ctx.translate(paddle.edge, 0);
+  // Press and launch anticipation remain visual: no collision size/position changes.
+  ctx.fillStyle = feedback.press > 0.05 ? '#c2fff0'
+    : stickyTime > 0 || hasStuckBall() ? POWER_COLORS.T : '#75dfd4';
   roundedRect(paddle.x - paddle.w / 2, paddle.y, paddle.w, paddle.h, 6); ctx.fill();
   ctx.fillStyle = '#c2fff0';
   roundedRect(paddle.x - paddle.w / 2 + 8, paddle.y + 2, paddle.w - 16, 3, 1); ctx.fill();
@@ -979,7 +1050,15 @@ function draw() {
     ctx.fillStyle = POWER_COLORS[type];
     ctx.fillRect(paddle.x - paddle.w / 2, paddle.y + 23 + index * 4, paddle.w * time / duration, 2);
   }
+  if (feedback.press > 0.01 && (state === 'ready' || hasStuckBall())) {
+    ctx.globalAlpha = feedback.press * 0.65;
+    ctx.strokeStyle = '#c2fff0'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(paddle.x, paddle.y - BALL_RADIUS - 2, BALL_RADIUS + 5, Math.PI, Math.PI * 2);
+    ctx.stroke(); ctx.globalAlpha = 1;
+  }
   drawComboRail();
+  ctx.restore();
   for (const ball of balls) {
     ctx.save();
     if (effects && piercingTime > 0) {
@@ -1019,8 +1098,7 @@ function resize() {
 function pointerSteer(event) {
   if (!active()) return;
   const bounds = canvas.getBoundingClientRect();
-  paddle.x = clamp((event.clientX - bounds.left) * WIDTH / bounds.width,
-    paddle.w / 2 + 8, WIDTH - paddle.w / 2 - 8);
+  targetPaddle((event.clientX - bounds.left) * WIDTH / bounds.width);
 }
 canvas.style.touchAction = 'none';
 function touchX(event) {
@@ -1032,6 +1110,9 @@ canvas.addEventListener('pointermove', (event) => {
     if (!active() || canvasTouch?.pointerId !== event.pointerId) return;
     const touch = canvasTouch;
     touch.currentX = touchX(event);
+    const now = performance.now();
+    touch.history.push({ x: touch.currentX, time: now });
+    touch.history = touch.history.filter((sample) => now - sample.time <= 100);
     touch.maxDisplacement = Math.max(touch.maxDisplacement, Math.abs(touch.currentX - touch.anchorX));
     if (touch.mode !== 'drag' && touch.maxDisplacement >= 12) {
       if (touch.mode === 'hold') {
@@ -1042,8 +1123,7 @@ canvas.addEventListener('pointermove', (event) => {
       touch.mode = 'drag';
     }
     if (touch.mode === 'drag') {
-      paddle.x = clamp(touch.paddleX + touch.currentX - touch.anchorX,
-        paddle.w / 2 + 8, WIDTH - paddle.w / 2 - 8);
+      targetPaddle(touch.paddleX + touch.currentX - touch.anchorX);
     }
     return;
   }
@@ -1055,22 +1135,43 @@ canvas.addEventListener('pointerdown', (event) => {
   event.preventDefault();
   canvas.focus({ preventScroll: true });
   canvas.setPointerCapture(event.pointerId);
+  pressedPointers.add(event.pointerId);
   if (event.pointerType === 'touch') {
     const x = touchX(event);
+    targetPaddle(paddle.x);
     canvasTouch = { pointerId: event.pointerId, anchorX: x, currentX: x,
       paddleX: paddle.x, startedAt: performance.now(), maxDisplacement: 0,
+      history: [{ x, time: performance.now() }],
       mode: 'pending', readyAtDown: state === 'ready' || hasStuckBall() };
     return;
   }
   pointerSteer(event);
-  // Attach immediately so a click-to-launch starts over the newly positioned paddle.
+  // Launch from the live paddle, never from an unrendered target.
   if (state === 'ready') balls[0].x = paddle.x;
   if (state === 'ready' || hasStuckBall()) launch();
 });
 function releaseCanvasTouch(event) {
-  if (canvasTouch?.pointerId !== event.pointerId) return;
+  pressedPointers.delete(event.pointerId);
+  if (canvasTouch?.pointerId !== event.pointerId) {
+    paddle.target = clamp(paddle.target, ...paddleBounds());
+    return;
+  }
   const touch = canvasTouch;
   canvasTouch = null;
+  paddle.target = clamp(paddle.target, ...paddleBounds());
+  if (event.type === 'pointerup' && touch.mode === 'drag' && effects && !reducedMotion.matches) {
+    const recent = touch.history.filter((sample) => performance.now() - sample.time <= 100);
+    if (recent.length >= 2) {
+      const first = recent[0], last = recent[recent.length - 1];
+      const velocity = (last.x - first.x) / Math.max(0.001, (last.time - first.time) / 1000);
+      if (Math.abs(velocity) > 80) {
+        paddle.velocity = velocity;
+        paddle.damping = 0.8;
+        // 0.99 is the skill's snappy projection, rather than scroll's long 0.998 coast.
+        paddle.target = clamp(paddle.x + velocity / 1000 * 0.99 / (1 - 0.99), ...paddleBounds());
+      }
+    }
+  }
   // Holds win at 200ms; cancellation and lost capture must never launch a ball.
   if (event.type === 'pointerup' && active() && (state === 'ready' || hasStuckBall()) && touch.readyAtDown
       && touch.mode === 'pending' && performance.now() - touch.startedAt < 200
@@ -1091,11 +1192,17 @@ for (const [id, direction] of [['left', -1], ['right', 1]]) {
     button.setPointerCapture(event.pointerId);
     touchDirections.set(event.pointerId, direction);
   });
-  const release = (event) => touchDirections.delete(event.pointerId);
+  const release = (event) => {
+    touchDirections.delete(event.pointerId);
+    if (!touchDirections.size) paddle.target = clamp(paddle.target, ...paddleBounds());
+  };
   button.addEventListener('pointerup', release);
   button.addEventListener('pointercancel', release);
   button.addEventListener('lostpointercapture', release);
 }
+$('launch-touch').addEventListener('pointerdown', (event) => pressedPointers.add(event.pointerId));
+window.addEventListener('pointerup', (event) => pressedPointers.delete(event.pointerId));
+window.addEventListener('pointercancel', (event) => pressedPointers.delete(event.pointerId));
 $('launch-touch').addEventListener('click', launch);
 $('primary').addEventListener('click', primaryAction);
 $('restart').addEventListener('click', startMission);
@@ -1105,8 +1212,9 @@ $('return-campaign').addEventListener('click', returnToCampaign);
 $('pause').addEventListener('click', togglePause);
 $('sound').addEventListener('click', toggleSound);
 function applyEffects(enabled) {
-  effects = enabled;
-  $('effects').checked = enabled;
+  effects = enabled && !reducedMotion.matches;
+  $('effects').checked = effects;
+  $('arena').classList.toggle('quiet-effects', !effects);
   if (!effects) { particles = []; shake = 0; for (const ball of balls) ball.trail = []; }
 }
 $('effects').addEventListener('change', (event) => applyEffects(event.target.checked));
@@ -1117,7 +1225,7 @@ window.addEventListener('keydown', (event) => {
   // Native Space/arrow behavior on focused controls takes priority over game shortcuts.
   if (control && (key === ' ' || key.startsWith('arrow') || control.matches('input, select, textarea'))) return;
   if (['arrowleft', 'arrowright', 'a', 'd', ' ', 'p', 'escape', 'm'].includes(key)) event.preventDefault();
-  if (['arrowleft', 'arrowright', 'a', 'd'].includes(key)) keys.add(key);
+  if (['arrowleft', 'arrowright', 'a', 'd', ' '].includes(key)) keys.add(key);
   if (event.repeat) return;
   if (key === ' ') launch();
   if (key === 'p' || key === 'escape') togglePause();
@@ -1126,6 +1234,7 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('keyup', (event) => keys.delete(event.key.toLowerCase()));
 function suspend() {
   canvasTouch = null;
+  pressedPointers.clear();
   keys.clear(); touchDirections.clear();
   if (active()) togglePause();
 }
