@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090e14">
+  <meta name="description" content="One paddle. An entire asteroid belt. Play Space Breaks, a space-inspired arcade brick breaker.">
+  <title>Space Breaks · A little cosmic destruction</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <a class="wordmark" href="./" aria-label="Space Breaks home"><span class="brand-mark" aria-hidden="true"></span><span>SPACE<span class="wordmark-light">BREAKS</span></span></a>
+      <span class="header-note">A LITTLE COSMIC DESTRUCTION</span>
+      <div class="header-actions">
+        <button id="sound" class="small-button" aria-pressed="false" title="Toggle sound (M)">Sound off</button>
+        <button id="pause" class="small-button" disabled title="Pause or resume (P / Escape)">Pause</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="game-column" aria-label="Space Breaks game">
+        <div class="scoreboard">
+          <div class="score-stat"><span class="label">SCORE</span><strong id="score">000000</strong></div>
+          <div class="score-stat best-stat"><span class="label" id="best-label">PERSONAL BEST</span><strong id="best">000000</strong></div>
+          <div class="hull-stat"><span class="label">HULL INTEGRITY</span><div id="lives" aria-label="3 lives remaining"><i></i><i></i><i></i></div></div>
+        </div>
+        <div class="arena-shell">
+          <div class="arena" id="arena">
+            <canvas id="game" width="800" height="680" tabindex="0" aria-label="Brick breaker playfield. Move with left and right arrows or A and D. Press Space to launch. Press P to pause." aria-describedby="instructions">Space Breaks requires a browser with HTML Canvas support.</canvas>
+            <div class="arena-coordinate top-left" aria-hidden="true">SB—01 / DEEP FIELD</div>
+            <div class="arena-coordinate top-right" id="combo" aria-hidden="true">AWAITING PILOT</div>
+            <div id="overlay" class="overlay">
+              <div class="overlay-content">
+                <div class="orbit-emblem" aria-hidden="true"><span></span></div>
+                <h1 id="overlay-title">Make some<br><em>space.</em></h1>
+                <p id="overlay-copy">An asteroid belt. A lone paddle.<br>A very satisfying chain reaction.</p>
+                <fieldset id="difficulty-picker"><legend>Choose your flight speed</legend><div class="difficulty-options"><label><input type="radio" name="difficulty" value="relaxed"><span>Drift</span></label><label><input type="radio" name="difficulty" value="normal" checked><span>Cruise</span></label><label><input type="radio" name="difficulty" value="fast"><span>Warp</span></label></div></fieldset>
+                <button id="primary" class="primary-button">Start mission <span aria-hidden="true">↗</span></button>
+                <button id="restart" class="text-button" hidden>Restart mission</button>
+                <div class="mode-actions">
+                  <button id="daily" class="text-button">Daily sector</button>
+                  <button id="endless" class="text-button" hidden>Endless drift</button>
+                  <button id="return-campaign" class="text-button" hidden>Return to campaign</button>
+                </div>
+                <span id="overlay-hint" class="overlay-hint">8 SECTORS · 3 LIVES · ONE MORE TRY</span>
+              </div>
+            </div>
+            <div id="announcement" class="announcement" role="status" aria-live="polite"></div>
+            <div id="launch-hint" class="launch-hint" hidden>Click, quick-tap, or press Space to launch</div>
+          </div>
+        </div>
+        <div class="arena-footer"><span><span class="live-dot"></span><span id="state-label">READY FOR DEPARTURE</span></span><span id="remaining">SECTOR 01 / 08</span></div>
+        <div class="touch-controls" aria-label="Touch controls"><button id="left" aria-label="Move paddle left">←</button><button id="launch-touch">Launch</button><button id="right" aria-label="Move paddle right">→</button></div>
+      </section>
+
+      <aside class="mission-panel">
+        <div class="sector-display"><div class="sector-number" id="sector-number">01<span>/08</span></div><h2 id="sector-name">First contact</h2><p id="sector-copy">Every great voyage begins<br>with breaking a few things.</p><div class="progress-track" role="progressbar" aria-label="Sector cleared" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill"></div></div><div class="progress-caption"><span>SECTOR CLEARED</span><span id="progress-label">0%</span></div></div>
+        <p id="mode-record" class="mode-record" hidden></p>
+        <section class="instructions" id="instructions"><h3>Flight manual</h3><div class="control-row"><span>Steer</span><span><kbd>←</kbd> <kbd>→</kbd> <span class="or">or</span> <kbd>A</kbd> <kbd>D</kbd></span></div><div class="control-row"><span>Launch</span><kbd>SPACE</kbd></div><div class="control-row"><span>Pause</span><kbd>P / ESC</kbd></div><p>Or move your mouse. On mobile, drag to guide, hold a side to glide, and quick-tap to launch. Arrow controls work too.</p></section>
+        <section class="power-guide"><h3>Catch a little advantage</h3><div><span class="power-symbol wide"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5v14M21 5v14M6 12h12M9 9l-3 3 3 3M15 9l3 3-3 3"/></svg></span><p><strong>Wide beam</strong><span>A bigger paddle. 12 seconds.</span></p></div><div><span class="power-symbol multi"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v6M5 15v-3h14v3"/><circle cx="12" cy="5" r="3"/><circle cx="5" cy="18" r="2.5"/><circle cx="12" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/></svg></span><p><strong>Multiball</strong><span>More chaos. Same mission.</span></p></div><div><span class="power-symbol shield"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-4 9-8 11-4-2-8-6-8-11V5zM12 7l1.5 3.5L17 12l-3.5 1.5L12 17l-1.5-3.5L7 12l3.5-1.5z"/></svg></span><p><strong>Safety net</strong><span>One rescue from the void.</span></p></div><div><span class="power-symbol piercing"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18M16 7l5 5-5 5M10 4v4M10 16v4"/></svg></span><p><strong>Piercing shot</strong><span>Pass through bricks. 8 seconds.</span></p></div><div><span class="power-symbol slow"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l-4 3"/></svg></span><p><strong>Slow field</strong><span>Half-speed motion. 8 seconds.</span></p></div><div><span class="power-symbol sticky"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15v5h14v-5M12 13v3M10 14l2 2 2-2"/><circle cx="12" cy="7" r="4"/></svg></span><p><strong>Sticky paddle</strong><span>One catch within 12 seconds. Tap to release.</span></p></div></section>
+        <div class="tip"><span class="tip-star" aria-hidden="true">✳</span><p>Aim with the paddle’s edges.<br>Stay above the belt for combos.</p></div>
+        <label class="effects-setting"><input id="effects" type="checkbox" checked> Impact effects</label>
+      </aside>
+    </main>
+    <footer class="page-footer"><span>BUILT FOR YOUR NEXT SMALL BREAK.</span><span>NO DOWNLOADS. JUST ORBITS.</span></footer>
+    <p class="sr-only" id="live-status" role="status" aria-live="polite"></p>
+    <noscript><p class="noscript">Enable JavaScript to play Space Breaks.</p></noscript>
+  </div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

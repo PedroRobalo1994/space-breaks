@@ -1,0 +1,12 @@
+{
+  "name": "space-breaks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A space-themed brick breaker. No runtime dependencies.",
+  "scripts": {
+    "start": "bun server.js",
+    "test": "bun test tests/"
+  },
+  "engines": { "bun": ">=1.4.2" }
+}
