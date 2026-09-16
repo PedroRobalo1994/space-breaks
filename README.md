@@ -1,5 +1,7 @@
 # Space Breaks
 
+[Play the live demo](https://PedroRobalo1994.github.io/space-breaks/)
+
 One paddle. An entire asteroid belt. A little cosmic destruction.
 
 A space-themed brick breaker: bounce the ball off your paddle, smash through 8 sectors of asteroid bricks, chain combos, catch power-ups, and don't let the ball fall into the void. Three hull lives. No downloads, no dependencies — just orbits.
